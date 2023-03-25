@@ -7,8 +7,9 @@ import std.string : format, chomp, split;
 import std.conv   : to;
 
 const int VERTS      = 27;           /* max number of vertices in a free completion + 1 */
-const int DEG        = 13;           /* max degree of a vertex in a free completion + 1, must be at least 13 because of row 0 */
-const int CONFS      = 640;          /* max number of configurations		*/
+const int DEG        = 13;           /* max degree of a vertex in a free completion + 1,
+                                      * must be at least 13 because of row 0 */
+const int CONFS      = 640;          /* max number of configurations */
 const int MAXVAL     = 12;
 const int CARTVERT   = (5*MAXVAL+2); /* domain of l_A, u_A, where A is an axle */
 const int INFTY      = 12;           /* the "12" in the definition of limited part  */
@@ -67,11 +68,11 @@ void discharge(int deg) {
   writeln(jarr2[10]["z"]);
 
   string filename3 = "data/d_tactics07.txt";
-	auto fin = File(filename3,"r");
+  auto fin = File(filename3,"r");
   int cnt = 0;
-	foreach (line; fin.byLine) {
+  foreach (line; fin.byLine) {
     if (cnt == 10) break;
-		writeln(line.chomp.split);
+    writeln(line.chomp.split);
     ++cnt;
   }
   writeln("33".to!(int) + 1);
@@ -95,7 +96,7 @@ void apply(int k, int epsilon, int level, int line, Tp_axle A, Tp_outlet[] sym, 
   if  (epsilon == 0) {
     assert((0 != outletForced(A, sym[i], k + 1)),                   "Invalid symmetry");
   } else {
-    assert((0 != reflForced(A, sym[i], k + 1)),                     "Invalid reflected symmetry");
+    assert((0 != reflForced(  A, sym[i], k + 1)),                   "Invalid reflected symmetry");
   }
 }
 
@@ -151,7 +152,58 @@ int reflForced(Tp_axle A, Tp_outlet T, int x) pure {
 
 
 // --------------------------------------------------------------------------------------------------------------------
-void caseSplit() {
+/*************************************************************************
+      checkCondition  Verifies condition line as described in [D]
+*************************************************************************/
+void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[] sym,
+  ref int pnosym, int lev, int lineno, int print) {
+    int i, j, deg = A.low[0], good;
+    static Tp_cond[MAXLEV] cond;
+
+  //if (sscanf(S, "%*s%d%d", &n, &m) != 2)    error("Syntax error", lineno);
+  /* check condition and compatibility with A */
+  assert((n >= 1 && n <= 5 * deg),        "Invalid vertex in condition");
+  assert((m >= -8 && m <= 9 && (m <= -5 || m >= 6)), "Invalid condition");
+  j = (n - 1) / deg;
+  i = (n - 1) % deg + 1;
+  assert(((n <= 2 * deg) || (A.low[i] == A.upp[i] && A.low[i] >= j + 4)),
+                                            "Condition not compatible with A");
+  //copyAxle(A + 1, A);
+  if (m > 0) { /* new lower bound */
+    assert((A.low[n] < m && m <= A.upp[n]),  "Invalid lower bound in condition");
+    A      .upp[n] = m - 1;
+    A2.low[n] = m;
+  } else {   /* new upper bound */
+    assert((A.low[n] <= -m && -m < A.upp[n]), "Invalid upper bound in condition");
+    A      .low[n] = 1 - m;
+    A2.upp[n] = -m;
+  }
+
+  /* remember symmetry unless contains a fan vertex */
+  for (i = 0, good = 1; i <= lev; i++)
+    if (cond[i].n > 2 * deg || cond[i].n < 1) good = 0;
+  if (good) { /* remember symmetry */
+    assert((pnosym < MAXSYM), "Too many symmetries");
+    if (print >= 0)   writef("Adding symmetry:");
+    //T = &sym[pnosym++];
+    sym[pnosym].number = lineno; sym[pnosym].value = 1; sym[pnosym].nolines = lev + 1;
+    for (i = 0; i <= lev; ++i) {
+      sym[pnosym].pos[i] = cond[i].n;
+      if (cond[i].m > 0) {
+        sym[pnosym].low[i] = cond[i].m;
+        sym[pnosym].upp[i] = INFTY;
+      } else {
+        sym[pnosym].low[i] = 5;
+        sym[pnosym].upp[i] = -cond[i].m;
+      }
+      if (print >= 0) writef(" (%d,%d,%d)", sym[pnosym].pos[i], sym[pnosym].low[i], sym[pnosym].upp[i]);
+    }
+    if (print >= 0) { writef("\n"); }
+  } else if (print >= 0) {
+    writef("Symmetry not added\n");
+  }
+  cond[lev].n = n; cond[lev].m = m; cond[lev + 1].n = 0; cond[lev + 1].m = 0;
+  pnosym++;
 }
 
 
