@@ -49,12 +49,30 @@ struct Tp_query {
   int z;
   int xi;
 }
+struct Tp_xyv {
+  int x;
+  int y;
+  int v;
+}
 alias tp_question = Tp_query[VERTS];
 alias tp_edgelist = int[MAXELIST][9][12];
 
 
 // --------------------------------------------------------------------------------------------------------------------
 void discharge(int deg) {
+  //string[50] ch;
+  int lev;	/* level of line being processed */
+  int prtline;	/* print details about line number "prtline" */
+  int nosym;	/* number of symmetries, see "sym" below */
+  //char str[MAXSTR];	/* holds input line */
+  //char fname[MAXSTR];	/* name of file to be tested */
+  Tp_axle[] axles;	/* axles[l] is A_l of [D] */
+  Tp_axle A;
+  Tp_outlet[150] sym;	/* sym[i] (i=0,..,nosym) are T_i (i=0,..,t-1) of [D] */
+  int a, printmode, print, lineno;
+  //char *ch;
+  Tp_xyv[10] xyv;
+
   writefln("deg = %d", deg);
 
   string fileName1 = "data/d_good_confs.json";
@@ -67,15 +85,50 @@ void discharge(int deg) {
   JSONValue[] jarr2 = jv2.array();
   writeln(jarr2[10]["z"]);
 
+  writef("\n\n\n");
   string filename3 = "data/d_tactics07.txt";
   auto fin = File(filename3,"r");
   int cnt = 0;
   foreach (line; fin.byLine) {
+    auto ch = line.chomp.split;
+    writeln(ch);
+    if (ch[0] == "Degree") { ++cnt; continue; }
     if (cnt == 10) break;
-    writeln(line.chomp.split);
+
+    switch (ch[1]) {
+    case "S":
+      apply(ch[2].to!(int), ch[3].to!(int), ch[4].to!(int), ch[5].to!(int), A, sym, nosym, lineno);
+      break;
+    case "R":
+      assert(reduce(A, lineno, 1), "Reducibility failed");
+      break;
+    case "H":
+      foreach (i, temp; ch[2 .. $]) {
+        auto temp2 = split(temp[1 .. $ - 1], ",");
+        xyv[i].x = temp2[0].to!(int);
+        xyv[i].y = temp2[1].to!(int);
+        xyv[i].v = temp2[2].to!(int);
+      }
+      libDischarge(xyv, A, lineno, print);
+      break;
+    case "C":
+      caseSplit(ch[2].to!(int), ch[3].to!(int), A, A, sym, nosym, lev, lineno, print, deg); lev++;
+      ++cnt; continue; // foreach
+    default:
+      assert(0, "Invalid instruction");
+    }
+    /* delete symetries */
+    // if (print >= PRTBAS && sym[nosym - 1].nolines - 1 >= lev) {
+    //   (void)printf("Deleting symetries:");
+    //   for (i = nosym; i >= 1 && sym[i - 1].nolines - 1 >= lev; i--) (void)printf(" %d", sym[i - 1].number);
+    //   (void)printf("\n"); (void)fflush(stdout);
+    // }
+    for (; nosym >= 1 && sym[nosym - 1].nolines - 1 >= lev; nosym--){} /* do nothing */
+    lev--;
+
     ++cnt;
   }
-  writeln("33".to!(int) + 1);
+  //writeln("33".to!(int) + 1);
 
 }
 private: // ここ以下すべて private
@@ -155,9 +208,9 @@ int reflForced(Tp_axle A, Tp_outlet T, int x) pure {
 /*************************************************************************
       caseSplit  Verifies condition line as described in [D]
 *************************************************************************/
-void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[] sym,
-  ref int pnosym, int lev, int lineno, int print) {
-    int i, j, deg = A.low[0], good;
+void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[150] sym,
+  ref int pnosym, int lev, int lineno, int print, int deg) {
+    int i, j, good;
     static Tp_cond[MAXLEV] cond;
 
   //if (sscanf(S, "%*s%d%d", &n, &m) != 2)    error("Syntax error", lineno);
@@ -216,19 +269,18 @@ writes the outlets into the file specified by OUTLETFILE so they can be
 verified for accuracy.
 If str!=NULL it verifies hubcap line as described in [D]
 **************************************************************************/
-void libDischarge(Tp_axle A, int lineno, int print) {
-  int[MAXVAL + 2] x, y, v;
+void libDischarge(Tp_xyv[] xyv, Tp_axle A, int lineno, int print) {
   int i, j, a, total = 0, deg = A.low[0];
   int[2 * MAXOUTLETS + 1] s;
   static int nouts;
   static Tp_posout[2 * MAXOUTLETS] posout;
 
-  for (i = 1; i <= x[0]; i++) {
-    if  (print >= 3)       writef("\n-.Checking hubcap member (%d,%d,%d)\n", x[i], y[i], v[i]);
-    for (j = 0; j < nouts; j++) { posout[j].x = x[i]; s[j] = 0; }
-    if  (x[i] != y[i])          { for (; j < 2 * nouts; j++) { posout[j].x = y[i]; s[j] = 0; } }
+  for (i = 1; i <= xyv[0].x; i++) {
+    if  (print >= 3)       writef("\n-.Checking hubcap member (%d,%d,%d)\n", xyv[i].x, xyv[i].y, xyv[i].v);
+    for (j = 0; j < nouts; j++) { posout[j].x = xyv[i].x; s[j] = 0; }
+    if  (xyv[i].x != xyv[i].y)          { for (; j < 2 * nouts; j++) { posout[j].x = xyv[i].y; s[j] = 0; } }
     s[j] = 99; /* to indicate end of list */
-    libDischargeCore(A, posout, s, v[i], 0, 0, lineno, print);
+    libDischargeCore(A, posout, s, xyv[i].v, 0, 0, lineno, print);
   }
   if (print >= 3) { writef("\n"); }
 }
