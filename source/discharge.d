@@ -55,7 +55,7 @@ alias tp_edgelist = int[MAXELIST][9][12];
 
 // --------------------------------------------------------------------------------------------------------------------
 void discharge(int deg) {
-  writefln("hoge. %d", deg);
+  writefln("deg = %d", deg);
 
   string fileName1 = "data/d_good_confs.json";
   auto jv1 = readText(fileName1).parseJSON();
@@ -153,7 +153,7 @@ int reflForced(Tp_axle A, Tp_outlet T, int x) pure {
 
 // --------------------------------------------------------------------------------------------------------------------
 /*************************************************************************
-      checkCondition  Verifies condition line as described in [D]
+      caseSplit  Verifies condition line as described in [D]
 *************************************************************************/
 void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[] sym,
   ref int pnosym, int lev, int lineno, int print) {
@@ -208,12 +208,116 @@ void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[] sym,
 
 
 // --------------------------------------------------------------------------------------------------------------------
-void libDischarge() {
+/*************************************************************************
+    libDischarge
+If str==NULL it assumes that A is the trivial axle of degree deg, where
+deg=A.low[0]. It reads rules and computes the corresponding outlets. It
+writes the outlets into the file specified by OUTLETFILE so they can be
+verified for accuracy.
+If str!=NULL it verifies hubcap line as described in [D]
+**************************************************************************/
+void libDischarge(Tp_axle A, int lineno, int print) {
+  int[MAXVAL + 2] x, y, v;
+  int i, j, a, total = 0, deg = A.low[0];
+  int[2 * MAXOUTLETS + 1] s;
+  static int nouts;
+  static Tp_posout[2 * MAXOUTLETS] posout;
+
+  for (i = 1; i <= x[0]; i++) {
+    if  (print >= 3)       writef("\n-.Checking hubcap member (%d,%d,%d)\n", x[i], y[i], v[i]);
+    for (j = 0; j < nouts; j++) { posout[j].x = x[i]; s[j] = 0; }
+    if  (x[i] != y[i])          { for (; j < 2 * nouts; j++) { posout[j].x = y[i]; s[j] = 0; } }
+    s[j] = 99; /* to indicate end of list */
+    libDischargeCore(A, posout, s, v[i], 0, 0, lineno, print);
+  }
+  if (print >= 3) { writef("\n"); }
+}
+
+/*************************************************************************
+    libDischargeCore    Verifies (H1)
+*************************************************************************/
+void libDischargeCore(Tp_axle A, Tp_posout[] posout, int[] s, int maxch, int pos, int depth, int lineno, int print) {
+  int deg = A.low[0], i, p, x, forcedch, allowedch;
+  bool good;
+  int[] sprime;
+  Tp_axle AA;
+  //Tp_posout PO;
+
+  /* compute forced and permitted rules, allowedch, forcedch, update s */
+  forcedch = allowedch = 0;
+  for (i = 0; s[i] < 99; i++) {
+    if      (s[i] > 0)                          forcedch += posout[i].T.value;
+    if      (s[i])                              continue;
+    if      (outletForced(A, posout[i].T, posout[i].x))     { s[i] = 1; forcedch += posout[i].T.value; }
+    else if (!outletPermitted(A, posout[i].T, posout[i].x)) s[i] = -1;
+    else if (posout[i].T.value > 0)                  allowedch += posout[i].T.value;
+  }
+
+  if (print >= 3) {
+    writef("POs: ");
+    for (i = 0; s[i] < 99; i++) {
+      if (s[i] < 0)  continue;
+      if (s[i] == 0) writef("?");
+      writef("%d,%d ", posout[i].T.number, posout[i].x);
+    }
+    writef("\n");
+  }
+  /* check if inequality holds */
+  if (forcedch + allowedch <= maxch) {
+    if (print >= 3) writef("Inequality holds. Case done.\n");
+    return;
+  }
+  /* check reducibility */
+  if (forcedch > maxch) {
+    assert(reduce(A, lineno, print >= 4 ? 1 : 0), "Incorrect hubcap upper bound");
+    if (print >= 3 && print < 4)               writef("Reducible. Case done.\n");
+    return;
+  }
+
+  //ALLOC(sprime, 2 * MAXOUTLETS + 1, int); ALLOC(AA, 1, tp_axle);
+  for (; s[pos] < 99; pos++, good = true) {
+    if (s[pos] || posout[pos].T.value < 0) continue;
+    /* accepting positioned outlet PO, computing AA */
+    x = posout[pos].x; AA = A;
+    for (i = 0; i < posout[pos].T.nolines; ++i) {
+      p = posout[pos].T.pos[i];
+      p = x - 1 + (p - 1) % deg < deg ? p + x - 1 : p + x - 1 - deg;
+      if (posout[pos].T.low[i] > AA.low[p]) AA.low[p] = posout[pos].T.low[i];
+      if (posout[pos].T.upp[i] < AA.upp[p]) AA.upp[p] = posout[pos].T.upp[i];
+      assert((AA.low[p] <= AA.upp[p]), "Unexpected error 321");
+    }
+    /* Check if a previously rejected positioned outlet is forced to apply */
+    for (i = 0; i < pos; i++)
+      if (s[i] == -1 && outletForced(AA, posout[i].T, posout[i].x)) {
+        if (print >= 3) {
+          writef("Positioned outlet ");
+          writef(",%d can't be forced, because it forces %d,%d\n", x, posout[i].T.number, posout[i].x);
+        }
+        good = false; break;
+      }
+    if (good) {
+      /* recursion with PO forced */
+      sprime = s; //for (i = 0; (sprime[i] = s[i]) < 99; ++i){} /* do nothing */
+      sprime[pos] = 1;
+      if (print >= 3) { writef("Starting recursion with "); writef(",%d forced\n", x); }
+      libDischargeCore(AA, posout, sprime, maxch, pos + 1, depth + 1, lineno, print);
+    }
+    /* rejecting positioned outlet PO */
+    if (print >= 3) { writef("Rejecting positioned outlet "); writef(",%d. ", x); }
+    s[pos] = -1; allowedch -= posout[pos].T.value;
+    if (allowedch + forcedch <= maxch) {
+      if (print >= 3) writef("Inequality holds.\n");
+      return;
+    }
+    else if (print >= 3) writef("\n");
+  }
+  assert(0, "Unexpected error 101");
 }
 
 
 // --------------------------------------------------------------------------------------------------------------------
-void reduce() {
+bool reduce(Tp_axle A, int lineno, int print) {
+  return (true);
 }
 
 
