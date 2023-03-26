@@ -5,6 +5,7 @@ import std.json   : JSONValue, parseJSON;
 import std.stdio  : writeln, writef, writefln, File;
 import std.string : format, chomp, split;
 import std.conv   : to;
+import std.range  : iota;
 
 const int VERTS      = 27;           /* max number of vertices in a free completion + 1 */
 const int DEG        = 13;           /* max degree of a vertex in a free completion + 1,
@@ -66,7 +67,7 @@ void discharge(int deg) {
   int nosym;	/* number of symmetries, see "sym" below */
   //char str[MAXSTR];	/* holds input line */
   //char fname[MAXSTR];	/* name of file to be tested */
-  Tp_axle[] axles;	/* axles[l] is A_l of [D] */
+  Tp_axle[MAXLEV + 1] axles;	/* axles[l] is A_l of [D] */
   Tp_axle A;
   Tp_outlet[150] sym;	/* sym[i] (i=0,..,nosym) are T_i (i=0,..,t-1) of [D] */
   int a, printmode, print, lineno;
@@ -86,6 +87,14 @@ void discharge(int deg) {
   writeln(jarr2[10]["z"]);
 
   writef("\n\n\n");
+
+  // axles の初期化
+  axles[0].low[0] = deg;
+  foreach (n; iota(5 * deg)) { axles[0].low[n + 1] = 5; }
+  axles[0].upp[0] = deg;
+  foreach (n; iota(5 * deg)) { axles[0].upp[n + 1] = INFTY; }
+  A = axles[0];
+
   string filename3 = "data/d_tactics07.txt";
   auto fin = File(filename3,"r");
   int cnt = 0;
