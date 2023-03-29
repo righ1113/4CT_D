@@ -68,7 +68,6 @@ void discharge(int deg) {
   //char str[MAXSTR];	/* holds input line */
   //char fname[MAXSTR];	/* name of file to be tested */
   Tp_axle[MAXLEV + 1] axles;	/* axles[l] is A_l of [D] */
-  Tp_axle A;
   Tp_outlet[150] sym;	/* sym[i] (i=0,..,nosym) are T_i (i=0,..,t-1) of [D] */
   int a, printmode, print, lineno;
   //char *ch;
@@ -93,7 +92,6 @@ void discharge(int deg) {
   foreach (n; iota(5 * deg)) { axles[0].low[n + 1] = 5; }
   axles[0].upp[0] = deg;
   foreach (n; iota(5 * deg)) { axles[0].upp[n + 1] = INFTY; }
-  A = axles[0];
 
   string filename3 = "data/d_tactics07.txt";
   auto fin = File(filename3,"r");
@@ -102,14 +100,14 @@ void discharge(int deg) {
     auto ch = line.chomp.split;
     writeln(ch);
     if (ch[0] == "Degree") { ++cnt; continue; }
-    if (cnt == 10) break;
+    if (cnt == 20) break;
 
     switch (ch[1]) {
     case "S":
-      apply(ch[2].to!(int), ch[3].to!(int), ch[4].to!(int), ch[5].to!(int), A, sym, nosym, lineno);
+      apply(ch[2].to!(int), ch[3].to!(int), ch[4].to!(int), ch[5].to!(int), axles[lev], sym, nosym, lineno);
       break;
     case "R":
-      assert(reduce(A, lineno, 1), "Reducibility failed");
+      assert(reduce(axles[lev], lineno, 1), "Reducibility failed");
       break;
     case "H":
       foreach (i, temp; ch[2 .. $]) {
@@ -118,11 +116,12 @@ void discharge(int deg) {
         xyv[i].y = temp2[1].to!(int);
         xyv[i].v = temp2[2].to!(int);
       }
-      libDischarge(xyv, A, lineno, print);
+      libDischarge(xyv, axles[lev], lineno, print);
       break;
     case "C":
-      caseSplit(ch[2].to!(int), ch[3].to!(int), A, A, sym, nosym, lev, lineno, print, deg); lev++;
-      ++cnt; continue; // foreach
+      caseSplit(ch[2].to!(int), ch[3].to!(int), axles[lev], axles[lev + 1], sym, nosym, lev, lineno, print, deg);
+      lev++;
+      cnt++; continue; // foreach
     default:
       assert(0, "Invalid instruction");
     }
@@ -135,9 +134,9 @@ void discharge(int deg) {
     for (; nosym >= 1 && sym[nosym - 1].nolines - 1 >= lev; nosym--){} /* do nothing */
     lev--;
 
-    ++cnt;
+    cnt++;
   }
-  //writeln("33".to!(int) + 1);
+  writefln("end.");
 
 }
 private: // ここ以下すべて private
@@ -230,7 +229,7 @@ void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[150] s
   i = (n - 1) % deg + 1;
   assert(((n <= 2 * deg) || (A.low[i] == A.upp[i] && A.low[i] >= j + 4)),
                                             "Condition not compatible with A");
-  //copyAxle(A + 1, A);
+  A2 = A; //copyAxle(A + 1, A);
   if (m > 0) { /* new lower bound */
     assert((A.low[n] < m && m <= A.upp[n]),  "Invalid lower bound in condition");
     A      .upp[n] = m - 1;
@@ -247,7 +246,6 @@ void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[150] s
   if (good) { /* remember symmetry */
     assert((pnosym < MAXSYM), "Too many symmetries");
     if (print >= 0)   writef("Adding symmetry:");
-    //T = &sym[pnosym++];
     sym[pnosym].number = lineno; sym[pnosym].value = 1; sym[pnosym].nolines = lev + 1;
     for (i = 0; i <= lev; ++i) {
       sym[pnosym].pos[i] = cond[i].n;
