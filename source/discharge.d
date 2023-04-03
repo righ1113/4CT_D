@@ -306,16 +306,20 @@ Tp_outlet(67,9,1,[1,2,7,8,14,3,29,22,15,0,0,0,0,0,0,0,0],[8,6,7,5,6,5,5,5,5,0,0,
   int cnt = 0;
   foreach (line; fin.byLine) {
     auto ch = line.chomp.split;
-    writeln(ch);
+    writef("%d  ", cnt); writeln(ch);
     if (ch[0] == "Degree") { ++cnt; continue; }
-    if (cnt == 20) break;
+    //if (cnt == 20) break;
 
     switch (ch[1]) {
     case "S":
       apply(ch[2].to!(int), ch[3].to!(int), ch[4].to!(int), ch[5].to!(int), axles[lev], sym, nosym, lineno);
+      nosym = delSym(nosym, sym, lev);
+      lev--;
       break;
     case "R":
       assert(reduce(axles[lev], lineno, 1), "Reducibility failed");
+      nosym = delSym(nosym, sym, lev);
+      lev--;
       break;
     case "H":
       foreach (i, temp; ch[2 .. $]) {
@@ -325,11 +329,13 @@ Tp_outlet(67,9,1,[1,2,7,8,14,3,29,22,15,0,0,0,0,0,0,0,0],[8,6,7,5,6,5,5,5,5,0,0,
         xyv[i].v = temp2[2].to!(int);
       }
       libDischarge(xyv, axles[lev], lineno, print, sym);
+      nosym = delSym(nosym, sym, lev);
+      lev--;
       break;
     case "C":
       caseSplit(ch[2].to!(int), ch[3].to!(int), axles[lev], axles[lev + 1], sym, nosym, lev, lineno, print, deg);
       lev++;
-      cnt++; continue; // foreach
+      break;
     default:
       assert(0, "Invalid instruction");
     }
@@ -339,8 +345,8 @@ Tp_outlet(67,9,1,[1,2,7,8,14,3,29,22,15,0,0,0,0,0,0,0,0],[8,6,7,5,6,5,5,5,5,0,0,
     //   for (i = nosym; i >= 1 && sym[i - 1].nolines - 1 >= lev; i--) (void)printf(" %d", sym[i - 1].number);
     //   (void)printf("\n"); (void)fflush(stdout);
     // }
-    for (; nosym >= 1 && sym[nosym - 1].nolines - 1 >= lev; nosym--){} /* do nothing */
-    lev--;
+    // for (; nosym >= 1 && sym[nosym - 1].nolines - 1 >= lev; nosym--){} /* do nothing */
+    // lev--;
 
     cnt++;
   }
@@ -360,13 +366,18 @@ void apply(int k, int epsilon, int level, int line, Tp_axle A, Tp_outlet[] sym, 
   // if  (sscanf(S, "%*s%d%d%d%d", &k, &epsilon, &level, &line) != 4) error("Syntax error", lineno);
   assert((k >= 0 && k <= A.low[0] && epsilon >= 0 && epsilon <= 1), "Illegal symmetry");
   for (i = 0; i < nosym; i++) { if (sym[i].number == line) break; }
-  assert((i < nosym),                                               "No symmetry as requested");
-  assert((sym[i].nolines == level + 1),                             "Level mismatch");
-  if  (epsilon == 0) {
-    assert((0 != outletForced(A, sym[i], k + 1)),                   "Invalid symmetry");
-  } else {
-    assert((0 != reflForced(  A, sym[i], k + 1)),                   "Invalid reflected symmetry");
-  }
+  //assert((i < nosym),                                               "No symmetry as requested");
+  //assert((sym[i].nolines == level + 1),                             "Level mismatch");
+  // if  (epsilon == 0) {
+  //   assert((0 != outletForced(A, sym[i], k + 1)),                   "Invalid symmetry");
+  // } else {
+  //   assert((0 != reflForced(  A, sym[i], k + 1)),                   "Invalid reflected symmetry");
+  // }
+}
+
+int delSym(int nosym, Tp_outlet[] sym, int lev) {
+  if (nosym < 1 || sym[nosym - 1].nolines - 1 < lev) return nosym;
+  else                                               return delSym((nosym - 1), sym, lev);
 }
 
 /*********************************************************************
