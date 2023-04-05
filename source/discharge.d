@@ -69,7 +69,7 @@ void discharge(int deg) {
   //char fname[MAXSTR];	/* name of file to be tested */
   Tp_axle[MAXLEV + 1] axles;	/* axles[l] is A_l of [D] */
   //Tp_outlet[2 * MAXOUTLETS] sym;	/* sym[i] (i=0,..,nosym) are T_i (i=0,..,t-1) of [D] */
-  int a, printmode, print = 4, lineno;
+  int a, printmode, print = 4;
   //char *ch;
   Tp_xyv[10] xyv;
 
@@ -306,18 +306,19 @@ Tp_outlet(67,9,1,[1,2,7,8,14,3,29,22,15,0,0,0,0,0,0,0,0],[8,6,7,5,6,5,5,5,5,0,0,
   int cnt = 0;
   foreach (line; fin.byLine) {
     auto ch = line.chomp.split;
-    writef("%d  ", cnt); writeln(ch);
+    writef("%d, nosym=%d  ", cnt, nosym); writeln(ch);
     if (ch[0] == "Degree") { ++cnt; continue; }
+    if (ch[0] == "Q.E.D.") { break; }
     //if (cnt == 20) break;
 
     switch (ch[1]) {
     case "S":
-      apply(ch[2].to!(int), ch[3].to!(int), ch[4].to!(int), ch[5].to!(int), axles[lev], sym, nosym, lineno);
+      apply(ch[2].to!(int), ch[3].to!(int), ch[4].to!(int), ch[5].to!(int), axles[lev], sym, nosym, cnt + 1);
       nosym = delSym(nosym, sym, lev);
       lev--;
       break;
     case "R":
-      assert(reduce(axles[lev], lineno, 1), "Reducibility failed");
+      assert(reduce(axles[lev], cnt + 1, 1), "Reducibility failed");
       nosym = delSym(nosym, sym, lev);
       lev--;
       break;
@@ -328,25 +329,17 @@ Tp_outlet(67,9,1,[1,2,7,8,14,3,29,22,15,0,0,0,0,0,0,0,0],[8,6,7,5,6,5,5,5,5,0,0,
         xyv[i].y = temp2[1].to!(int);
         xyv[i].v = temp2[2].to!(int);
       }
-      libDischarge(xyv, axles[lev], lineno, print, sym);
+      libDischarge(xyv, axles[lev], cnt + 1, print, sym);
       nosym = delSym(nosym, sym, lev);
       lev--;
       break;
     case "C":
-      caseSplit(ch[2].to!(int), ch[3].to!(int), axles[lev], axles[lev + 1], sym, nosym, lev, lineno, print, deg);
+      caseSplit(ch[2].to!(int), ch[3].to!(int), axles[lev], axles[lev + 1], sym, nosym, lev, cnt + 1, print, deg);
       lev++;
       break;
     default:
       assert(0, "Invalid instruction");
     }
-    /* delete symetries */
-    // if (print >= PRTBAS && sym[nosym - 1].nolines - 1 >= lev) {
-    //   (void)printf("Deleting symetries:");
-    //   for (i = nosym; i >= 1 && sym[i - 1].nolines - 1 >= lev; i--) (void)printf(" %d", sym[i - 1].number);
-    //   (void)printf("\n"); (void)fflush(stdout);
-    // }
-    // for (; nosym >= 1 && sym[nosym - 1].nolines - 1 >= lev; nosym--){} /* do nothing */
-    // lev--;
 
     cnt++;
   }
@@ -360,19 +353,24 @@ private: // ここ以下すべて private
 /*************************************************************************
       apply   Verifies symmetry line as described in [D]
 *************************************************************************/
-void apply(int k, int epsilon, int level, int line, Tp_axle A, Tp_outlet[] sym, int nosym, int lineno) pure {
+void apply(int k, int epsilon, int level, int line, Tp_axle A, Tp_outlet[] sym, int nosym, int lineno) {
   int i;
 
   // if  (sscanf(S, "%*s%d%d%d%d", &k, &epsilon, &level, &line) != 4) error("Syntax error", lineno);
   assert((k >= 0 && k <= A.low[0] && epsilon >= 0 && epsilon <= 1), "Illegal symmetry");
-  for (i = 0; i < nosym; i++) { if (sym[i].number == line) break; }
-  //assert((i < nosym),                                               "No symmetry as requested");
-  //assert((sym[i].nolines == level + 1),                             "Level mismatch");
-  // if  (epsilon == 0) {
-  //   assert((0 != outletForced(A, sym[i], k + 1)),                   "Invalid symmetry");
-  // } else {
-  //   assert((0 != reflForced(  A, sym[i], k + 1)),                   "Invalid reflected symmetry");
-  // }
+  writefln("    %d %d %d %d", sym[0].number, sym[1].number, sym[2].number, sym[3].number);
+  for (i = 0; i < nosym; i++) {
+    if (sym[i].number == line) {
+      break;
+    }
+  }
+  assert((i < nosym),                                               "No symmetry as requested");
+  assert((sym[i].nolines == level + 1),                             "Level mismatch");
+  if  (epsilon == 0) {
+    assert((0 != outletForced(A, sym[i], k + 1)),                   "Invalid symmetry");
+  } else {
+    assert((0 != reflForced(  A, sym[i], k + 1)),                   "Invalid reflected symmetry");
+  }
 }
 
 int delSym(int nosym, Tp_outlet[] sym, int lev) {
@@ -465,7 +463,9 @@ void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[206] s
   if (good) { /* remember symmetry */
     assert((pnosym < MAXSYM), "Too many symmetries");
     if (print >= 0)   writef("Adding symmetry:");
-    sym[pnosym].number = lineno; sym[pnosym].value = 1; sym[pnosym].nolines = lev + 1;
+    sym[pnosym].number = lineno;
+    sym[pnosym].value = 1;
+    sym[pnosym].nolines = lev + 1;
     for (i = 0; i <= lev; ++i) {
       sym[pnosym].pos[i] = cond[i].n;
       if (cond[i].m > 0) {
@@ -478,11 +478,11 @@ void caseSplit(int n, int m, ref Tp_axle A, ref Tp_axle A2, ref Tp_outlet[206] s
       if (print >= 0) writef(" (%d,%d,%d)", sym[pnosym].pos[i], sym[pnosym].low[i], sym[pnosym].upp[i]);
     }
     if (print >= 0) { writef("\n"); }
+    pnosym++;
   } else if (print >= 0) {
     writef("Symmetry not added\n");
   }
   cond[lev].n = n; cond[lev].m = m; cond[lev + 1].n = 0; cond[lev + 1].m = 0;
-  pnosym++;
 }
 
 
