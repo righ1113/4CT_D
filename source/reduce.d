@@ -138,7 +138,7 @@ void getEdgeNo(JSONValue gConf, ref tp_edgeno edgeno, long[string] gConfMajor) p
     for (v = 1; v <= ring; v++) {
       if (done[v])        { continue; }
       u = (v > 1) ? v - 1 : ring; w = (v < ring) ? v + 1 : 1;
-      inter = 3 * gConf[v+2][0].integer + 4 * (done[u] + done[w]);
+      inter = 3 * gConf[v+2][0+1].integer + 4 * (done[u] + done[w]);
       if (inter > maxint) { maxint = inter; best = v; }
     }
     grav = gConf[best+2]; u = (best > 1) ? best - 1 : ring;
