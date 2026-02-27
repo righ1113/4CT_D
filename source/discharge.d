@@ -315,13 +315,12 @@ void libDischarge(Tp_xyv[] xyv, Tp_axle A, int lineno, int print, Tp_outlet[] sy
     libDischargeCore    Verifies (H1)
 *************************************************************************/
 void libDischargeCore(Tp_axle A, Tp_posout[] posout, int[] s, int maxch, int pos, int depth, int lineno, int print) {
-  int deg = A.low[0], i, p, x, forcedch, allowedch;
+  int deg = A.low[0], i, x, forcedch, allowedch;
   bool good;
   int[] sprime;
   Tp_axle AA;
-  //Tp_posout PO;
 
-  /* compute forced and permitted rules, allowedch, forcedch, update s */
+  /* 1. compute forced and permitted rules, allowedch, forcedch, update s */
   forcedch = allowedch = 0;
   for (i = 0; s[i] < 99; i++) {
     if      (s[i] > 0)                          forcedch += posout[i].T.value;
@@ -331,6 +330,7 @@ void libDischargeCore(Tp_axle A, Tp_posout[] posout, int[] s, int maxch, int pos
     else if (posout[i].T.value > 0)                  allowedch += posout[i].T.value;
   }
 
+  /* 2. print */
   if (print >= 3) {
     writef("POs: ");
     for (i = 0; s[i] < 99; i++) {
@@ -340,59 +340,75 @@ void libDischargeCore(Tp_axle A, Tp_posout[] posout, int[] s, int maxch, int pos
     }
     writef("\n");
   }
-  /* check if inequality holds */
+
+  /* 3. check if inequality holds */
   if (forcedch + allowedch <= maxch) {
     if (print >= 3) writef("Inequality holds. Case done.\n");
-    return;
+    return; // true end 1
   }
-  /* check reducibility */
+
+  /* 4. check reducibility */
   if (forcedch > maxch) {
     assert(reduce(A, lineno, print >= 4 ? 1 : 0), "Incorrect hubcap upper bound");
     if (print >= 3 && print < 4)               writef("Reducible. Case done.\n");
-    return;
+    return; // true end 2
   }
 
-  //ALLOC(sprime, 2 * MAXOUTLETS + 1, int); ALLOC(AA, 1, tp_axle);
+  /* 5. */
   for (; s[pos] < 99; pos++, good = true) {
     if (s[pos] || posout[pos].T.value < 0) continue;
+
     /* accepting positioned outlet PO, computing AA */
-    x = posout[pos].x; AA = A;
-    for (i = 0; i < posout[pos].T.nolines; ++i) {
-      p = posout[pos].T.pos[i];
-      p = x - 1 + (p - 1) % deg < deg ? p + x - 1 : p + x - 1 - deg;
-      if (posout[pos].T.low[i] > AA.low[p]) AA.low[p] = posout[pos].T.low[i];
-      if (posout[pos].T.upp[i] < AA.upp[p]) AA.upp[p] = posout[pos].T.upp[i];
-      assert((AA.low[p] <= AA.upp[p]), "Unexpected error 321");
-    }
-    /* Check if a previously rejected positioned outlet is forced to apply */
-    for (i = 0; i < pos; i++) {
-      if (s[i] == -1 && outletForced(AA, posout[i].T, posout[i].x)) {
-        if (print >= 3) {
-          writef("Positioned outlet ");
-          writef(",%d can't be forced, because it forces %d,%d\n", x, posout[i].T.number, posout[i].x);
-        }
-        good = false; break;
-      }
-    }
-    if (good) {
-      /* recursion with PO forced */
-      sprime = s; //for (i = 0; (sprime[i] = s[i]) < 99; ++i){} /* do nothing */
+    AA = A;
+    assert321(pos, posout[pos].x, AA, posout, deg);
+
+    /* recursion with PO forced */
+    if (isGood(pos, posout[pos].x, AA, posout, s, print)) {
+      sprime = s;
       sprime[pos] = 1;
       if (print >= 3) { writef("Starting recursion with "); writef(",%d forced\n", x); }
       libDischargeCore(AA, posout, sprime, maxch, pos + 1, depth + 1, lineno, print);
     }
+
     /* rejecting positioned outlet PO */
     if (print >= 3) { writef("Rejecting positioned outlet "); writef(",%d. ", x); }
     s[pos] = -1; allowedch -= posout[pos].T.value;
     if (allowedch + forcedch <= maxch) {
       if (print >= 3) writef("Inequality holds.\n");
-      return;
+      return; // true end 3
     }
     else if (print >= 3) writef("\n");
   }
+
+  /* 6. error */
   assert(0, "Unexpected error 101");
 }
 
+void assert321(int pos, int x, Tp_axle AA, Tp_posout[] posout, int deg) {
+  int p, i;
+  for (i = 0; i < posout[pos].T.nolines; ++i) {
+    p = posout[pos].T.pos[i];
+    p = x - 1 + (p - 1) % deg < deg ? p + x - 1 : p + x - 1 - deg;
+    if (posout[pos].T.low[i] > AA.low[p]) AA.low[p] = posout[pos].T.low[i];
+    if (posout[pos].T.upp[i] < AA.upp[p]) AA.upp[p] = posout[pos].T.upp[i];
+    assert((AA.low[p] <= AA.upp[p]), "Unexpected error 321");
+  }
+}
+
+/* Check if a previously rejected positioned outlet is forced to apply */
+bool isGood(int pos, int x, Tp_axle AA, Tp_posout[] posout, int[] s, int print) {
+  int i;
+  for (i = 0; i < pos; i++) {
+    if (s[i] == -1 && outletForced(AA, posout[i].T, posout[i].x)) {
+      if (print >= 3) {
+        writef("Positioned outlet ");
+        writef(",%d can't be forced, because it forces %d,%d\n", x, posout[i].T.number, posout[i].x);
+      }
+      return false;
+    }
+  }
+  return true;
+}
 
 // --------------------------------------------------------------------------------------------------------------------
 bool reduce(Tp_axle A, int lineno, int print) {
