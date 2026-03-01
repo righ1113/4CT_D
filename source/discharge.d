@@ -316,7 +316,6 @@ void libDischarge(Tp_xyv[] xyv, Tp_axle A, int lineno, int print, Tp_outlet[] sy
 *************************************************************************/
 void libDischargeCore(Tp_axle A, Tp_posout[] posout, int[] s, int maxch, int pos, int depth, int lineno, int print) {
   int deg = A.low[0], i, x, forcedch, allowedch;
-  bool good;
   int[] sprime;
   Tp_axle AA;
 
@@ -355,7 +354,7 @@ void libDischargeCore(Tp_axle A, Tp_posout[] posout, int[] s, int maxch, int pos
   }
 
   /* 5. */
-  for (; s[pos] < 99; pos++, good = true) {
+  for (; s[pos] < 99; pos++) {
     if (s[pos] || posout[pos].T.value < 0) continue;
 
     /* accepting positioned outlet PO, computing AA */
